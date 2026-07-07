@@ -1,0 +1,7 @@
+Request Befehle:
+
+Example Get
+socat -T 5 -,ignoreeof TCP4:example.com:80 < exampleGet.txt
+
+First Connection
+socat -T 5 -,ignoreeof TCP4:127.0.0.1:1234
