@@ -25,6 +25,29 @@ type TCPListener = {
   }
 }
 
+type DynBuf = {
+  buffer: Buffer;
+  lenght: number;
+}
+
+function bufPush(dynBuf: DynBuf, data: Buffer): void {
+  const newLen = dynBuf.lenght + data.length
+  if (dynBuf.lenght < newLen) {
+    let cap = Math.max(dynBuf.buffer.length, 32)
+    while (cap < newLen) {
+      cap *= 2
+    }
+    const grown = Buffer.alloc(cap)
+    dynBuf.buffer.copy(grown, 0, 0)
+    dynBuf.buffer = grown
+
+  }
+  data.copy(dynBuf.buffer, dynBuf.lenght, 0)
+  dynBuf.lenght = newLen
+
+
+}
+
 main()
 
 async function main() {
@@ -49,17 +72,43 @@ async function newConn(conn: TCPConn): Promise<void> {
 }
 
 async function serveClient(conn: TCPConn) {
+  const buf: DynBuf = { buffer: Buffer.alloc(0), lenght: 0 }
   while (true) {
-    const data = await soRead(conn)
-    if (data.length === 0) {
-      console.log('end connection')
-      break;
+    const msg: null | Buffer = cutMessage(buf)
+    if (!msg) {
+      const data: Buffer = await soRead(conn)
+      bufPush(buf, data)
+      if (data.length === 0) {
+        return
+      }
+      continue
     }
+    if (msg.equals(Buffer.from('quit\n'))) {
+      await soWrite(conn, Buffer.from('Bye.'))
+      console.log('end connection')
+      conn.socket.destroy()
+      return
+    } else {
+      const reply = Buffer.concat([Buffer.from('Echo:'), msg])
+      await soWrite(conn, reply)
+    }
+  }
+}
 
-    console.log('data', data)
-    await soWrite(conn, data)
+function cutMessage(buf: DynBuf): null | Buffer {
+  const idx = buf.buffer.subarray(0, buf.lenght).indexOf('\n')
+  if (idx < 0) {
+    return null
   }
 
+  const msg = Buffer.from(buf.buffer.subarray(0, idx + 1))
+  bufPop(buf, idx + 1)
+  return msg
+}
+
+function bufPop(buf: DynBuf, len: number): void {
+  buf.buffer.copyWithin(0, len, buf.lenght)
+  buf.lenght -= len
 }
 
 function soInit(socket: net.Socket): TCPConn {
@@ -120,13 +169,23 @@ function soWrite(conn: TCPConn, data: Buffer): Promise<void> {
       return
     }
 
-    conn.socket.write(data, (err: Error | null | undefined) => {
-      if (err) {
-        reject(err)
-      } else {
-        resolve()
-      }
-    })
+    if (data.toString() === "Bye.") {
+      conn.socket.write(data, (err: Error | null | undefined) => {
+        if (err) {
+          reject(err)
+        } else {
+          resolve()
+        }
+      })
+    } else {
+      conn.socket.write(data, (err: Error | null | undefined) => {
+        if (err) {
+          reject(err)
+        } else {
+          resolve()
+        }
+      })
+    }
   })
 }
 

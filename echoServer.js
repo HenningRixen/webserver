@@ -43,6 +43,20 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const net = __importStar(require("net"));
+function bufPush(dynBuf, data) {
+    const newLen = dynBuf.lenght + data.length;
+    if (dynBuf.lenght < newLen) {
+        let cap = Math.max(dynBuf.buffer.length, 32);
+        while (cap < newLen) {
+            cap *= 2;
+        }
+        const grown = Buffer.alloc(cap);
+        dynBuf.buffer.copy(grown, 0, 0);
+        dynBuf.buffer = grown;
+    }
+    data.copy(dynBuf.buffer, dynBuf.lenght, 0);
+    dynBuf.lenght = newLen;
+}
 main();
 function main() {
     return __awaiter(this, void 0, void 0, function* () {
@@ -69,16 +83,42 @@ function newConn(conn) {
 }
 function serveClient(conn) {
     return __awaiter(this, void 0, void 0, function* () {
+        const buf = { buffer: Buffer.alloc(0), lenght: 0 };
         while (true) {
-            const data = yield soRead(conn);
-            if (data.length === 0) {
-                console.log('end connection');
-                break;
+            const msg = cutMessage(buf);
+            if (!msg) {
+                const data = yield soRead(conn);
+                bufPush(buf, data);
+                if (data.length === 0) {
+                    return;
+                }
+                continue;
             }
-            console.log('data', data);
-            yield soWrite(conn, data);
+            if (msg.equals(Buffer.from('quit\n'))) {
+                yield soWrite(conn, Buffer.from('Bye.'));
+                console.log('end connection');
+                conn.socket.destroy();
+                return;
+            }
+            else {
+                const reply = Buffer.concat([Buffer.from('Echo:'), msg]);
+                yield soWrite(conn, reply);
+            }
         }
     });
+}
+function cutMessage(buf) {
+    const idx = buf.buffer.subarray(0, buf.lenght).indexOf('\n');
+    if (idx < 0) {
+        return null;
+    }
+    const msg = Buffer.from(buf.buffer.subarray(0, idx + 1));
+    bufPop(buf, idx + 1);
+    return msg;
+}
+function bufPop(buf, len) {
+    buf.buffer.copyWithin(0, len, buf.lenght);
+    buf.lenght -= len;
 }
 function soInit(socket) {
     const conn = {
@@ -129,14 +169,26 @@ function soWrite(conn, data) {
             reject(conn.err);
             return;
         }
-        conn.socket.write(data, (err) => {
-            if (err) {
-                reject(err);
-            }
-            else {
-                resolve();
-            }
-        });
+        if (data.toString() === "Bye.") {
+            conn.socket.write(data, (err) => {
+                if (err) {
+                    reject(err);
+                }
+                else {
+                    resolve();
+                }
+            });
+        }
+        else {
+            conn.socket.write(data, (err) => {
+                if (err) {
+                    reject(err);
+                }
+                else {
+                    resolve();
+                }
+            });
+        }
     });
 }
 function soListen(hostname, port) {
