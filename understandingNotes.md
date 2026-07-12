@@ -111,6 +111,7 @@ und dann eine connection erstellt asyncron und die dann conncurrent ist
 - also 1 zu n
 
 ## Excurs Bytemanipulation in js
+
 - todo hier mal damit beschäftigen
 
 ## Pipelining requests

@@ -79,21 +79,26 @@ async function serveClient(conn: TCPConn) {
   }
 }
 
-// message("a\nb\nc\n") dynbufbuffer
-//          012345678
-// databuffer = a\n
-//              012
-
 function bufPush(dynBuf: DynBuf, data: Buffer): void {
   const newLen = dynBuf.length + data.length
-  if (dynBuf.length < newLen) {
+  if (dynBuf.head + newLen > dynBuf.buffer.length) {
+    if (dynBuf.head >= dynBuf.buffer.length / 2) {
+      realData(dynBuf).copy(dynBuf.buffer, 0)
+      dynBuf.head = 0
+    }
+  }
+  if (dynBuf.head + newLen > dynBuf.buffer.length) {
     let cap = Math.max(dynBuf.buffer.length, 32)
-    while (cap < dynBuf.head + newLen) {
+    while (cap < newLen) {
+      cap *= 2
+    }
+    if (cap === dynBuf.buffer.length) {
       cap *= 2
     }
     const grown = Buffer.alloc(cap)
-    dynBuf.buffer.copy(grown, 0, 0)
+    realData(dynBuf).copy(grown, 0)
     dynBuf.buffer = grown
+    dynBuf.head = 0
 
   }
   data.copy(dynBuf.buffer, dynBuf.head + dynBuf.length, 0)
@@ -105,8 +110,6 @@ function bufPush(dynBuf: DynBuf, data: Buffer): void {
 function realData(buf: DynBuf) {
   return buf.buffer.subarray(buf.head, buf.head + buf.length)
 }
-// message("a\nb\nc\n")
-//          012345678
 
 function cutMessage(buf: DynBuf): null | Buffer {
   const idx = realData(buf).indexOf('\n')
@@ -115,7 +118,6 @@ function cutMessage(buf: DynBuf): null | Buffer {
   }
 
   const msg = Buffer.from(buf.buffer.subarray(buf.head, buf.head + idx + 1))
-  //a\n
   bufPop(buf, idx + 1)
   return msg
 }
