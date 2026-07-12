@@ -57,7 +57,7 @@ wie readFile und http usw (also außerhalb des doms)
 - Queue: Was später ausgeführt werden soll
 - Event Loop: Schiebt fertige Aufgaben vom Warteraum in die Ausführung
 
-```
+```typescript
 console.log("Start");
 
 setTimeout(() => {
@@ -82,7 +82,7 @@ console.log("Ende");
 
 - Callback: Ergebnis wird mit callback(ergebnis) übergeben
 
-```
+```typescript
 
 //callback mit ergebnis
 function addiere(a: number, b: number, callback: (add: number) => void) {
@@ -113,6 +113,7 @@ und dann eine connection erstellt asyncron und die dann conncurrent ist
 ## Excurs Bytemanipulation in js
 
 - todo hier mal damit beschäftigen
+  - siehe chat gpt chat und mache das dann hier in dem projekt
 
 ## Pipelining requests
 
