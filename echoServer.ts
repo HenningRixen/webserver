@@ -27,26 +27,10 @@ type TCPListener = {
 
 type DynBuf = {
   buffer: Buffer;
-  lenght: number;
+  head: number;
+  length: number;
 }
 
-function bufPush(dynBuf: DynBuf, data: Buffer): void {
-  const newLen = dynBuf.lenght + data.length
-  if (dynBuf.lenght < newLen) {
-    let cap = Math.max(dynBuf.buffer.length, 32)
-    while (cap < newLen) {
-      cap *= 2
-    }
-    const grown = Buffer.alloc(cap)
-    dynBuf.buffer.copy(grown, 0, 0)
-    dynBuf.buffer = grown
-
-  }
-  data.copy(dynBuf.buffer, dynBuf.lenght, 0)
-  dynBuf.lenght = newLen
-
-
-}
 
 main()
 
@@ -72,7 +56,7 @@ async function newConn(conn: TCPConn): Promise<void> {
 }
 
 async function serveClient(conn: TCPConn) {
-  const buf: DynBuf = { buffer: Buffer.alloc(0), lenght: 0 }
+  const buf: DynBuf = { buffer: Buffer.alloc(0), length: 0, head: 0 }
   while (true) {
     const msg: null | Buffer = cutMessage(buf)
     if (!msg) {
@@ -95,20 +79,50 @@ async function serveClient(conn: TCPConn) {
   }
 }
 
+// message("a\nb\nc\n") dynbufbuffer
+//          012345678
+// databuffer = a\n
+//              012
+
+function bufPush(dynBuf: DynBuf, data: Buffer): void {
+  const newLen = dynBuf.length + data.length
+  if (dynBuf.length < newLen) {
+    let cap = Math.max(dynBuf.buffer.length, 32)
+    while (cap < dynBuf.head + newLen) {
+      cap *= 2
+    }
+    const grown = Buffer.alloc(cap)
+    dynBuf.buffer.copy(grown, 0, 0)
+    dynBuf.buffer = grown
+
+  }
+  data.copy(dynBuf.buffer, dynBuf.head + dynBuf.length, 0)
+  dynBuf.length = newLen
+
+
+}
+
+function realData(buf: DynBuf) {
+  return buf.buffer.subarray(buf.head, buf.head + buf.length)
+}
+// message("a\nb\nc\n")
+//          012345678
+
 function cutMessage(buf: DynBuf): null | Buffer {
-  const idx = buf.buffer.subarray(0, buf.lenght).indexOf('\n')
+  const idx = realData(buf).indexOf('\n')
   if (idx < 0) {
     return null
   }
 
-  const msg = Buffer.from(buf.buffer.subarray(0, idx + 1))
+  const msg = Buffer.from(buf.buffer.subarray(buf.head, buf.head + idx + 1))
+  //a\n
   bufPop(buf, idx + 1)
   return msg
 }
 
 function bufPop(buf: DynBuf, len: number): void {
-  buf.buffer.copyWithin(0, len, buf.lenght)
-  buf.lenght -= len
+  buf.head += len
+  buf.length -= len
 }
 
 function soInit(socket: net.Socket): TCPConn {
